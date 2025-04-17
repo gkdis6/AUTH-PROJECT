@@ -20,17 +20,30 @@
 
 ## 인증 로직 개요
 
-이 시스템은 **Access Token**과 **Refresh Token**을 활용한 일반적인 JWT 인증 방식을 따릅니다. 보안 강화를 위해 토큰은 **`httpOnly` 쿠키**에 저장되어 자바스크립트를 통한 직접적인 접근(XSS 공격)을 방지합니다.
+이 시스템은 **Access Token**과 **Refresh Token**을 활용한 JWT 인증 방식을 따릅니다. 보안 강화를 위해 두 토큰은 모두 **`httpOnly` 쿠키**에 저장되어 자바스크립트를 통한 직접적인 접근(XSS 공격)을 방지합니다.
 
-*   **Access Token**: 수명이 짧으며, 실제 API 요청 시 인증에 사용됩니다. `httpOnly`, `path=/` 쿠키로 저장됩니다.
-*   **Refresh Token**: 수명이 길며, Access Token이 만료되었을 때 새로운 Access Token을 발급받는 데 사용됩니다. 백엔드 DB에도 해시된 값이 저장되어 보안을 강화합니다. `httpOnly`, `path=/auth/refresh` 쿠키로 저장됩니다.
+*   **Access Token**:
+    *   수명이 짧으며 (예: 15분), 실제 API 요청 시 쿠키를 통해 서버에 전달되어 사용자를 인증합니다.
+    *   `httpOnly`, `path=/` 속성을 가진 쿠키로 저장됩니다. `path=/` 설정은 애플리케이션의 모든 경로에서 API를 요청할 때 브라우저가 자동으로 Access Token 쿠키를 포함하도록 보장합니다.
+*   **Refresh Token**:
+    *   수명이 길며 (예: 7일), Access Token이 만료되었을 때 새로운 Access Token을 발급받는 데 사용됩니다.
+    *   백엔드 데이터베이스에도 해시된 값이 저장되어, 서버 측에서 특정 사용자의 리프레시 토큰을 무효화하는 등 보안을 강화합니다.
+    *   `httpOnly`, `path=/auth/refresh` 속성을 가진 쿠키로 저장됩니다.
+        *   **`path=/auth/refresh` 설정 및 동작 방식 (시나리오 예시):**
+            1.  사용자가 로그인 후 특정 페이지(예: `/profile`)에서 자신의 정보를 보기 위해 `/auth/me` 엔드포인트로 요청을 보냅니다. 브라우저는 `path=/`인 Access Token 쿠키만 포함하여 전송합니다 (`path=/auth/refresh`인 Refresh Token 쿠키는 이 요청 경로와 일치하지 않아 전송되지 않음).
+            2.  Access Token이 만료되어 서버는 401 Unauthorized 응답을 반환합니다.
+            3.  클라이언트(예: Axios 인터셉터)는 401 응답을 감지하고, 새 Access Token을 받기 위해 **정확히 `/auth/refresh` 엔드포인트**로 요청을 보냅니다.
+            4.  이때, 요청 경로가 `/auth/refresh`이므로, 브라우저는 `path=/auth/refresh`로 설정된 **Refresh Token 쿠키를 이 요청에 포함하여 보냅니다.** (만료된 Access Token 쿠키도 `path=/`이므로 함께 전송됩니다.)
+            5.  서버는 `/auth/refresh` 요청에 담긴 Refresh Token을 검증하고, 유효하면 새 Access Token을 발급하여 `path=/`인 쿠키로 설정해 줍니다.
+            6.  클라이언트는 새로 발급받은 Access Token으로 원래 실패했던 `/auth/me` 요청을 재시도합니다. 이때는 새 Access Token 쿠키(`path=/`)만 포함되어 요청이 성공합니다.
+        *   **고려사항**: 이 방식은 자동 토큰 재발급 로직이 명확히 `/auth/refresh` 경로로만 요청을 보낼 때 동작합니다. 만약 다른 경로에서 Refresh Token 쿠키가 필요하다면 이 설정은 문제가 될 수 있습니다. 일반적인 유연성과 단순성을 위해서는 `path=/` 설정이 더 선호될 수 있습니다.
 
 **주요 흐름:**
 
-1.  **로그인**: 사용자가 유효한 자격 증명으로 로그인하면, 백엔드는 Access Token과 Refresh Token을 생성하여 `httpOnly` 쿠키로 설정하고, Refresh Token의 해시를 DB에 저장합니다.
-2.  **API 요청**: 프론트엔드는 API 요청 시 `withCredentials: true` 옵션을 사용하여 쿠키(주로 Access Token)를 자동으로 포함시킵니다. 백엔드는 `JwtStrategy`를 통해 Access Token을 검증합니다.
-3.  **토큰 재발급**: Access Token이 만료되어 API 요청이 401 에러를 반환하면, 프론트엔드의 Axios 인터셉터가 이를 감지합니다. 인터셉터는 자동으로 `/auth/refresh` 엔드포인트로 요청을 보내고, 이때 Refresh Token 쿠키가 함께 전송됩니다. 백엔드는 Refresh Token을 검증하고 DB의 해시값과 비교한 후, 유효하면 새로운 Access Token을 발급하여 쿠키로 설정합니다. 인터셉터는 원래 실패했던 요청을 새로운 Access Token으로 재시도합니다.
-4.  **로그아웃**: 사용자가 로그아웃하면, 백엔드는 DB의 Refresh Token 해시를 제거하고, 클라이언트의 Access Token 및 Refresh Token 쿠키를 만료시킵니다.
+1.  **로그인**: 사용자가 유효한 자격 증명으로 로그인하면, 백엔드는 Access Token(`path=/`)과 Refresh Token(`path=/auth/refresh`)을 생성하여 `httpOnly` 쿠키로 설정하고, Refresh Token의 해시를 DB에 저장합니다.
+2.  **API 요청**: 프론트엔드는 API 요청 시 `withCredentials: true` 옵션을 사용하여 쿠키를 자동으로 포함시킵니다. 요청 경로에 따라 포함되는 쿠키가 달라집니다 (예: `/auth/me` 요청 시 AT만 포함, `/auth/refresh` 요청 시 AT와 RT 모두 포함). 백엔드는 주로 Access Token을 검증합니다.
+3.  **토큰 재발급**: Access Token이 만료되어 API 요청이 401 에러를 반환하면, 프론트엔드의 Axios 인터셉터가 이를 감지합니다. 인터셉터는 자동으로 `/auth/refresh` 엔드포인트로 요청을 보내고, 이때 Refresh Token 쿠키(`path=/auth/refresh`)가 함께 전송됩니다. 백엔드는 Refresh Token을 검증하고 유효하면 새로운 Access Token(`path=/`)을 발급하여 쿠키로 설정합니다. 인터셉터는 원래 실패했던 요청을 새로운 Access Token으로 재시도합니다.
+4.  **로그아웃**: 사용자가 로그아웃하면, 백엔드는 DB의 Refresh Token 해시를 제거하고, 클라이언트의 Access Token(`path=/`) 및 Refresh Token(`path=/auth/refresh`) 쿠키를 만료시킵니다.
 
 ## 프로젝트 구조 (간략) 
 ```

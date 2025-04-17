@@ -54,7 +54,7 @@ export class AuthService {
       secure: isProduction,
       sameSite: 'lax',
       maxAge: refreshMaxAge,
-      path: '/', // Refresh Token은 갱신 엔드포인트에서만 사용
+      path: '/auth/refresh',
     });
   }
 
@@ -67,7 +67,7 @@ export class AuthService {
     });
     res.cookie('refreshToken', '', {
       httpOnly: true, secure: isProduction, sameSite: 'lax',
-      expires: new Date(0), path: '/', // 설정 시 path와 동일하게 유지
+      expires: new Date(0), path: '/auth/refresh',
     });
   }
 
@@ -95,7 +95,7 @@ export class AuthService {
   }
 
   // 토큰 재발급: 새 Access Token 쿠키 설정
-  async refreshTokens(userId: string, refreshTokenFromCookie: string, res: Response): Promise<void> {
+  async refreshTokens(userId: string, refreshToken: string, res: Response): Promise<void> {
     console.log('Refresh tokens service:', { userId: userId });
     const user = await this.userService.findOneById(userId);
 
@@ -104,7 +104,7 @@ export class AuthService {
     }
 
     const isRefreshTokenMatching = await bcrypt.compare(
-      refreshTokenFromCookie,
+      refreshToken,
       user.currentHashedRefreshToken
     );
 
