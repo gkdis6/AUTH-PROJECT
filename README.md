@@ -181,3 +181,32 @@ NEXT_PUBLIC_API_URL=http://localhost:3000 # 백엔드 API 서버 주소
 | `createdAt`                 | TIMESTAMP          | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 생성 일시                   |
 | `updatedAt`                 | TIMESTAMP          | NOT NULL, DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 수정 일시                   |
 | `currentHashedRefreshToken` | VARCHAR            | NULL                          | 현재 해시된 리프레시 토큰 |
+
+## 테스트 케이스 (백엔드 - AuthController)
+
+`backend/src/auth/auth.controller.spec.ts` 파일은 `AuthController`의 주요 기능과 시나리오를 검증합니다. 각 테스트 케이스의 목적은 다음과 같습니다.
+
+*   **컨트롤러 정의:**
+    *   `it('컨트롤러가 정의되어 있어야 함')`: 의존성 주입을 포함하여 `AuthController` 인스턴스가 성공적으로 생성되는지 기본적인 'smoke test'를 수행합니다.
+
+*   **회원가입 (signUp):**
+    *   `it('성공: 새로운 사용자를 생성하고 민감 정보를 제외한 정보를 반환해야 함')`: 회원가입 요청 시 `AuthService.signUp`이 올바른 데이터로 호출되고, 응답으로 상태 코드 201과 함께 민감 정보(비밀번호 해시 등)가 제외된 사용자 정보가 반환되는지 확인합니다.
+    *   `it('실패: 이메일 중복 등으로 서비스에서 ConflictException 발생 시 예외를 전파해야 함')`: `AuthService.signUp`에서 이메일 중복 등의 이유로 `ConflictException`이 발생했을 때, 해당 예외가 컨트롤러를 통해 올바르게 전파되는지 확인합니다.
+
+*   **로그인 (signIn):**
+    *   `it('성공: 사용자 정보를 반환하고 AuthService가 쿠키를 설정해야 함')`: 로그인 요청 시 `AuthService.signIn`이 올바른 자격 증명 및 `Response` 객체와 함께 호출되고, 컨트롤러가 성공 메시지와 사용자 정보를 반환하는지 확인합니다. (쿠키 설정 자체는 서비스 레벨에서 이루어진다고 가정)
+    *   `it('실패: 잘못된 자격 증명으로 서비스에서 UnauthorizedException 발생 시 예외를 전파해야 함')`: `AuthService.signIn`에서 잘못된 이메일/비밀번호로 인해 `UnauthorizedException`이 발생했을 때, 해당 예외가 컨트롤러를 통해 올바르게 전파되는지 확인합니다.
+
+*   **토큰 갱신 (refreshTokens):**
+    *   `it('성공: AuthService.refreshTokens를 호출하고 성공 메시지를 반환해야 함')`: 유효한 리프레시 토큰 요청 시 `AuthService.refreshTokens`가 올바른 `userId`, `refreshToken`, `Response` 객체와 함께 호출되고, 컨트롤러가 성공 메시지를 반환하는지 확인합니다. (새 토큰 쿠키 설정은 서비스 레벨 책임)
+    *   `it('실패: 유효하지 않은 리프레시 토큰으로 서비스에서 UnauthorizedException 발생 시 예외를 전파해야 함')`: `AuthService.refreshTokens`에서 만료되거나 유효하지 않은 리프레시 토큰으로 인해 `UnauthorizedException`이 발생했을 때, 해당 예외가 컨트롤러를 통해 올바르게 전파되는지 확인합니다.
+
+*   **로그아웃 (logout):**
+    *   `it('성공: AuthService.logout을 호출하고 성공 메시지를 반환해야 함')`: 로그아웃 요청 시 `AuthService.logout`이 올바른 `userId`와 `Response` 객체와 함께 호출되고, 컨트롤러가 성공 메시지를 반환하는지 확인합니다. (쿠키 제거는 서비스 레벨 책임)
+
+*   **프로필 조회 (getProfile):**
+    *   `it('성공: 인증된 사용자의 프로필 정보를 반환해야 함')`: 유효한 액세스 토큰으로 보호된 `/auth/me` 요청 시, `AuthGuard('jwt')`를 통과한 후 `@AuthenticatedRequest()` 데코레이터를 통해 주입된 `req.user` 객체가 컨트롤러에서 그대로 반환되는지 확인합니다.
+
+*   **토큰 만료 및 갱신 프로세스 (흐름 검증):**
+    *   `it('성공: 액세스 토큰 만료 -> 리프레시 -> 프로필 재요청 성공 흐름')`: ①로그인 후 ②액세스 토큰이 만료되었다고 가정하고 ③`/auth/refresh` 엔드포인트를 호출하여 토큰 갱신을 시뮬레이션한 뒤 ④새로 발급된 액세스 토큰으로 `/auth/me` 요청이 성공하는 전체적인 흐름을 검증합니다. (가드/인터셉터의 동작을 암시적으로 가정)
+    *   `it('실패: 리프레시 토큰 만료 시 토큰 갱신 실패')`: 리프레시 토큰 자체도 만료되었거나 유효하지 않을 때, `/auth/refresh` 엔드포인트 호출 시 `AuthService`에서 `UnauthorizedException`이 발생하고 이것이 컨트롤러를 통해 전파되는지 확인합니다.
