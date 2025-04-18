@@ -7,10 +7,13 @@ const useAuthStore = create<AuthState & {
   signup: (credentials: SignUpCredentials) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
+  setLoading: (isLoading: boolean) => void;
 }>((set) => ({
   user: null,
   isAuthenticated: false,
   isLoading: false,
+
+  setLoading: (isLoading) => set({ isLoading }),
 
   login: async (credentials) => {
     try {

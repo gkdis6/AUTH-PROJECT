@@ -3,6 +3,7 @@ import { Controller, Post, Body, UseGuards, Req, Res, HttpCode, HttpStatus, Get 
 import { AuthService } from './auth.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AuthGuard } from '@nestjs/passport';
 import { Response, Request } from 'express';
 import { User } from '../user/entities/user.entity';
@@ -10,7 +11,6 @@ import { Role } from './enums/role.enum';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
 import { RefreshRequest, AuthenticatedRequest, AuthenticatedUser } from './interfaces/auth-request.interface';
-import { RefreshTokenGuard } from './guards/refresh-token.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -45,7 +45,7 @@ export class AuthController {
   }
 
   @Post('/refresh')
-  @UseGuards(RefreshTokenGuard, AuthGuard('jwt-refresh'))
+  @UseGuards(AuthGuard('jwt-refresh'))
   @HttpCode(HttpStatus.OK)
   async refreshTokens(
     @Req() req: RefreshRequest,
@@ -53,13 +53,13 @@ export class AuthController {
   ): Promise<{ message: string }> {
     console.log('Refresh tokens request:', { user: req.user });
     const userId = req.user.payload.sub;
-    const refreshToken = req.cookies.refreshToken;
+    const refreshToken = req.user.refreshToken;
     await this.authService.refreshTokens(userId, refreshToken, res);
     return { message: 'Tokens refreshed successfully' };
   }
 
   @Post('/logout')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   async logout(
     @Req() req: AuthenticatedRequest,
@@ -72,7 +72,7 @@ export class AuthController {
   }
 
   @Get('/me')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   getProfile(@Req() req: AuthenticatedRequest): AuthenticatedUser {
     console.log('Get profile request:', { user: req.user });
@@ -80,7 +80,7 @@ export class AuthController {
   }
 
   @Get('/admin-only')
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   getAdminData(@Req() req: AuthenticatedRequest) {
     const user = req.user;
@@ -88,7 +88,7 @@ export class AuthController {
   }
 
   @Get('/user-only')
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.USER)
   getUserData(@Req() req: AuthenticatedRequest) {
     const user = req.user;
@@ -96,7 +96,7 @@ export class AuthController {
   }
 
   @Get('/any-role')
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.USER)
   getAnyRoleData(@Req() req: AuthenticatedRequest) {
     const user = req.user;

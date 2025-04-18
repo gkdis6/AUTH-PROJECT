@@ -1,21 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useAuthStore from '@/stores/auth';
 import apiClient from '@/lib/axios';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading, logout } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
+  const logout = useAuthStore((state) => state.logout);
   const [profile, setProfile] = useState<any>(null);
   const [apiMessage, setApiMessage] = useState<string>('');
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, isLoading, router]);
 
   const fetchProfile = async () => {
     setApiMessage('프로필 정보 요청 중...');
@@ -30,17 +25,15 @@ export default function DashboardPage() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">로딩 중...</div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return null;
-  }
+  const handleLogout = async () => {
+    try {
+      await logout();
+      router.push('/login');
+    } catch (error) {
+      console.error('로그아웃 실패:', error);
+      setApiMessage('로그아웃 중 오류가 발생했습니다.');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -53,7 +46,7 @@ export default function DashboardPage() {
             <div className="flex items-center">
               <span className="mr-4">안녕하세요, {user?.email}</span>
               <button
-                onClick={() => logout()}
+                onClick={handleLogout}
                 className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
               >
                 로그아웃

@@ -54,31 +54,53 @@ apiClient.interceptors.response.use(
   async (error: AxiosError<ErrorResponse>) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
     const status = error.response?.status;
+    const errorCode = error.response?.data?.errorCode; // 백엔드에서 보낸 errorCode 확인
 
     console.error('Response Error:', {
       status: status,
       url: originalRequest?.url,
       isRetry: originalRequest?._retry,
+      errorCode: errorCode, // errorCode 로깅 추가
       errorMessage: error.message,
-      // responseData: error.response?.data, // 필요시 활성화
+      responseData: error.response?.data,
     });
 
-    // 401 에러 처리 (토큰 갱신 시도)
+    // 401 에러 처리
     if (originalRequest && status === 401) {
+
+      // !--- 토큰 갱신 조건 변경 ---!
+      // errorCode가 'ACCESS_TOKEN_EXPIRED'일 때만 갱신 시도
+      if (errorCode !== 'ACCESS_TOKEN_EXPIRED') {
+        console.warn(`Auth: Received 401 but errorCode is not ACCESS_TOKEN_EXPIRED (errorCode: ${errorCode}). Skipping refresh.`);
+        // 로그아웃 및 리디렉션 로직 추가 (필요시)
+        const authStore = useAuthStore.getState();
+        if (authStore.isAuthenticated) {
+          try { await authStore.logout(); }
+          catch (logoutError) { console.error('Auth: Error during automatic logout:', logoutError); }
+          if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+            window.location.href = '/login';
+            console.log('Auth: Redirecting to /login');
+          }
+        }
+        return Promise.reject(error); // 갱신 시도 없이 에러 반환
+      }
+
+      // --- 이하 토큰 갱신 로직 (ACCESS_TOKEN_EXPIRED 경우) ---
+      console.log(`Auth: Received 401 with ACCESS_TOKEN_EXPIRED for ${originalRequest.url}. Attempting token refresh.`);
+
       // 로그아웃 요청 또는 이미 재시도한 요청은 처리 안 함
       if (originalRequest.url === '/auth/logout' || originalRequest._retry) {
         console.warn(`Auth: Skipping refresh for ${originalRequest.url} (logout or already retried).`);
-        // 이미 재시도한 경우 로그아웃 처리 (기존 로직 유지 가능)
+        // 이미 재시도했는데 또 만료 에러? -> 로그아웃
         if (originalRequest._retry) {
-           console.error(`Auth: Received 401 again for ${originalRequest.url} (original request had _retry=true). Performing logout.`);
-           // 로그아웃 로직... (기존 코드 활용)
+           console.error(`Auth: Received 401 ACCESS_TOKEN_EXPIRED again for ${originalRequest.url} (after retry). Performing logout.`);
            const authStore = useAuthStore.getState();
            if (authStore.isAuthenticated) {
              try { await authStore.logout(); }
              catch (logoutError) { console.error('Auth: Error during automatic logout:', logoutError); }
-             // 리디렉션 로직 다시 활성화
              if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
                window.location.href = '/login';
+              console.log('Auth 2 : Redirecting to /login');
              }
            }
         }
@@ -88,68 +110,54 @@ apiClient.interceptors.response.use(
       // 토큰 갱신이 이미 진행 중인 경우
       if (isRefreshing) {
         console.log('Auth: Token refresh already in progress. Adding request to queue.');
-        // 현재 요청을 큐에 추가하고, 갱신 완료 후 처리될 Promise 반환
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         }).then(() => {
-            // 토큰 갱신 성공 후, 원래 요청 재시도
-            originalRequest._retry = true; // 재시도 플래그 설정
+            originalRequest._retry = true;
             console.log(`Auth: Retrying request from queue: ${originalRequest.url}`);
             return apiClient(originalRequest);
           })
           .catch((err) => {
-            // 토큰 갱신 실패 시 에러 반환
             console.error(`Auth: Failed to retry request from queue: ${originalRequest.url}`, err);
             return Promise.reject(err);
           });
       }
 
-      // 첫 401 에러, 갱신 시도 시작
-      console.log(`Auth: Received 401 for ${originalRequest.url}. Attempting token refresh.`);
-      originalRequest._retry = true; // 재시도 플래그는 여기서도 설정 (갱신 실패 시 바로 reject하기 위함)
+      // 첫 401 만료 에러, 갱신 시도 시작
+      originalRequest._retry = true;
       isRefreshing = true;
 
       try {
-        // 토큰 갱신 API 호출
         console.log('Auth: Calling POST /auth/refresh');
         const refreshResponse = await apiClient.post('/auth/refresh');
 
         if (refreshResponse.status === 200) {
-          console.log('Auth: Token refresh successful (received 200 from /auth/refresh).');
-          // 갱신 성공. 큐에 쌓인 요청들 처리 (resolve)
-          processQueue(null, 'new_token_placeholder'); // 토큰 값은 실제론 필요없음
-
-          // 원래 실패했던 요청 재시도
+          console.log('Auth: Token refresh successful.');
+          processQueue(null, 'new_token_placeholder');
           console.log(`Auth: Retrying original request: ${originalRequest.url}`);
           return apiClient(originalRequest);
         }
-        // 200이 아닌 경우 (이론상 발생하기 어려움)
         throw new Error('Unexpected status code from /auth/refresh');
 
       } catch (refreshError: any) {
-        // 토큰 갱신 실패 (/auth/refresh 호출 실패)
         console.error('Auth: Token refresh failed.', {
           refreshErrorStatus: refreshError.response?.status,
           refreshErrorMessage: refreshError.message,
         });
-        // 갱신 실패. 큐에 쌓인 요청들 처리 (reject)
         processQueue(refreshError, null);
 
-        // 로그아웃 처리
         console.error('Auth: Performing logout due to refresh failure.');
         const authStore = useAuthStore.getState();
         if (authStore.isAuthenticated) {
           try { await authStore.logout(); }
           catch (logoutError) { console.error('Auth: Error during automatic logout:', logoutError); }
-          // 리디렉션 로직 다시 활성화
           if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
             window.location.href = '/login';
+            console.log('Auth 3 : Redirecting to /login');
           }
         }
-        // 갱신 실패 에러 반환
         return Promise.reject(refreshError);
       } finally {
-        // 갱신 작업 완료 후 플래그 리셋
         isRefreshing = false;
       }
     }
