@@ -21,7 +21,7 @@ export class RefreshTokenStrategy extends PassportStrategy(Strategy, 'jwt-refres
     ) {
         super({
             jwtFromRequest: refreshCookieExtractor,
-            secretOrKey: configService.get<string>('JWT_REFRESH_SECRET'),
+            secretOrKey: configService.get<string>('REFRESH_TOKEN_SECRET'),
             ignoreExpiration: false,
             passReqToCallback: true,
         });

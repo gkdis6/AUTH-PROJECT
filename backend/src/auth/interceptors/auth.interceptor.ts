@@ -5,40 +5,23 @@ import {
   CallHandler,
   HttpException,
   HttpStatus,
+  Logger,
+  UnauthorizedException,
 } from '@nestjs/common';
-import { Observable, from, throwError } from 'rxjs';
-import { catchError, switchMap } from 'rxjs/operators';
-import { AuthService } from '../auth.service';
-import { Response } from 'express';
+import { Observable, throwError } from 'rxjs';
+import { catchError, tap } from 'rxjs/operators';
 
 @Injectable()
 export class AuthInterceptor implements NestInterceptor {
-  constructor(private authService: AuthService) {}
+  private logger = new Logger(AuthInterceptor.name);
+  constructor() {}
 
   async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<any>> {
+    this.logger.debug('AuthInterceptor: Request received');
     return next.handle().pipe(
+      tap(() => this.logger.debug('AuthInterceptor: Request successful')),
       catchError((error) => {
-        if (error instanceof HttpException && error.getStatus() === HttpStatus.UNAUTHORIZED) {
-          const request = context.switchToHttp().getRequest();
-          const response = context.switchToHttp().getResponse<Response>();
-          const refreshToken = request.cookies?.refreshToken;
-
-          if (!refreshToken) {
-            return throwError(() => error);
-          }
-
-          // Promise를 Observable로 변환하고 pipe 연산자 사용
-          return from(this.authService.refreshTokensFromInterceptor(refreshToken, response)).pipe(
-            switchMap(() => {
-              // 원래 요청 재시도
-              return next.handle();
-            }),
-            catchError(() => {
-              // Refresh Token도 만료된 경우
-              return throwError(() => error);
-            }),
-          );
-        }
+        this.logger.error(`AuthInterceptor: Error caught - ${error.message}`, error.stack);
         return throwError(() => error);
       }),
     );

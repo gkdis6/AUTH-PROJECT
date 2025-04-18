@@ -54,7 +54,7 @@ export class AuthService {
       secure: isProduction,
       sameSite: 'lax',
       maxAge: refreshMaxAge,
-      path: '/auth/refresh',
+      path: '/',
     });
   }
 
@@ -67,7 +67,7 @@ export class AuthService {
     });
     res.cookie('refreshToken', '', {
       httpOnly: true, secure: isProduction, sameSite: 'lax',
-      expires: new Date(0), path: '/auth/refresh',
+      expires: new Date(0), path: '/',
     });
   }
 

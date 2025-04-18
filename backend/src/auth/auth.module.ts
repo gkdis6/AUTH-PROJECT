@@ -5,6 +5,7 @@ import { AuthController } from './auth.controller';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { RefreshTokenStrategy } from './strategies/jwt-refresh.strategy';
 import { UserModule } from '../user/user.module';
 import { AuthInterceptor } from './interceptors/auth.interceptor';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -25,7 +26,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, AuthInterceptor],
+  providers: [AuthService, JwtStrategy, RefreshTokenStrategy, AuthInterceptor],
   exports: [AuthService],
 })
 export class AuthModule {}

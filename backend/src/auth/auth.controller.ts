@@ -10,6 +10,7 @@ import { Role } from './enums/role.enum';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
 import { RefreshRequest, AuthenticatedRequest, AuthenticatedUser } from './interfaces/auth-request.interface';
+import { RefreshTokenGuard } from './guards/refresh-token.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -44,7 +45,7 @@ export class AuthController {
   }
 
   @Post('/refresh')
-  @UseGuards(AuthGuard('jwt-refresh'))
+  @UseGuards(RefreshTokenGuard, AuthGuard('jwt-refresh'))
   @HttpCode(HttpStatus.OK)
   async refreshTokens(
     @Req() req: RefreshRequest,
