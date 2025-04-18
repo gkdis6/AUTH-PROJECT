@@ -38,31 +38,33 @@
 3.  **토큰 재발급**: Access Token이 만료되어 API 요청이 401 에러(`errorCode: 'ACCESS_TOKEN_EXPIRED'`)를 반환하면, 프론트엔드의 Axios 인터셉터가 이를 감지합니다. 인터셉터는 자동으로 `/auth/refresh` 엔드포인트로 요청을 보내고, 이때 Refresh Token 쿠키(`path=/`)가 함께 전송됩니다. 백엔드는 Refresh Token을 검증하고 유효하면 새로운 Access Token(`path=/`)을 발급하여 쿠키로 설정합니다. 인터셉터는 원래 실패했던 요청을 새로운 Access Token으로 재시도합니다.
 4.  **로그아웃**: 사용자가 로그아웃하면, 백엔드는 DB의 Refresh Token 해시를 제거하고, 클라이언트의 Access Token 및 Refresh Token 쿠키(`path=/`)를 만료시킵니다.
 
-## 프로젝트 구조 (간략) 
+## 프로젝트 구조 (간략)
+
 ```
 .
-├── backend/ # NestJS 백엔드
-│ ├── src/
-│ │ ├── auth/ # 인증 관련 모듈 (Controller, Service, Strategies, DTOs, Interfaces)
-│ │ ├── user/ # 사용자 관련 모듈 (Controller, Service, Entity, DTOs, Enums)
-│ │ ├── app.module.ts
-│ │ └── main.ts # 애플리케이션 진입점
-│ ├── .env # 환경 변수 (직접 생성 필요)
-│ └── ...
-├── frontend/ # Next.js 프론트엔드
-│ ├── src/
-│ │ ├── app/ # 라우팅 및 페이지 (App Router)
-│ │ │ ├── (auth)/ # 인증 관련 레이아웃/페이지 (예: login, signup)
-│ │ │ ├── (main)/ # 로그인 후 보여질 레이아웃/페이지 (예: dashboard)
-│ │ │ └── layout.tsx
-│ │ ├── components/ # 공통 컴포넌트
-│ │ ├── context/ # 전역 상태 관리 (예: AuthContext)
-│ │ ├── hooks/ # 커스텀 훅
-│ │ └── lib/ # 라이브러리, 유틸리티 (예: axios 인스턴스)
-│ ├── .env.local # 환경 변수 (직접 생성 필요)
-│ └── ...
+├── backend/          # NestJS 백엔드
+│   ├── src/
+│   │   ├── auth/       # 인증 모듈
+│   │   ├── user/       # 사용자 모듈
+│   │   ├── app.module.ts
+│   │   └── main.ts
+│   ├── .env
+│   └── package.json
+├── frontend/         # Next.js 프론트엔드
+│   ├── src/
+│   │   ├── app/        # 라우팅 및 페이지 (App Router)
+│   │   │   ├── layout.tsx
+│   │   │   └── page.tsx
+│   │   ├── components/ # 공통 컴포넌트 (AuthInitializer.tsx 등)
+│   │   ├── lib/        # 라이브러리 (axios.ts 등)
+│   │   ├── stores/     # 상태 관리 (auth.ts 등)
+│   │   └── types/      # 타입 정의
+│   ├── .env.local
+│   └── package.json
+├── .env              # Docker Compose 용 루트 .env (선택적)
+├── docker-compose.yml  # Docker Compose 설정 (선택적)
 ├── .gitignore
-└── README.md # 현재 파일
+└── README.md         # 현재 파일
 ```
 
 ## 설치 및 실행
