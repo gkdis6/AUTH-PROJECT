@@ -28,22 +28,15 @@
 *   **Refresh Token**:
     *   수명이 길며 (예: 7일), Access Token이 만료되었을 때 새로운 Access Token을 발급받는 데 사용됩니다.
     *   백엔드 데이터베이스에도 해시된 값이 저장되어, 서버 측에서 특정 사용자의 리프레시 토큰을 무효화하는 등 보안을 강화합니다.
-    *   `httpOnly`, `path=/auth/refresh` 속성을 가진 쿠키로 저장됩니다.
-        *   **`path=/auth/refresh` 설정 및 동작 방식 (시나리오 예시):**
-            1.  사용자가 로그인 후 특정 페이지(예: `/profile`)에서 자신의 정보를 보기 위해 `/auth/me` 엔드포인트로 요청을 보냅니다. 브라우저는 `path=/`인 Access Token 쿠키만 포함하여 전송합니다 (`path=/auth/refresh`인 Refresh Token 쿠키는 이 요청 경로와 일치하지 않아 전송되지 않음).
-            2.  Access Token이 만료되어 서버는 401 Unauthorized 응답을 반환합니다.
-            3.  클라이언트(예: Axios 인터셉터)는 401 응답을 감지하고, 새 Access Token을 받기 위해 **정확히 `/auth/refresh` 엔드포인트**로 요청을 보냅니다.
-            4.  이때, 요청 경로가 `/auth/refresh`이므로, 브라우저는 `path=/auth/refresh`로 설정된 **Refresh Token 쿠키를 이 요청에 포함하여 보냅니다.** (만료된 Access Token 쿠키도 `path=/`이므로 함께 전송됩니다.)
-            5.  서버는 `/auth/refresh` 요청에 담긴 Refresh Token을 검증하고, 유효하면 새 Access Token을 발급하여 `path=/`인 쿠키로 설정해 줍니다.
-            6.  클라이언트는 새로 발급받은 Access Token으로 원래 실패했던 `/auth/me` 요청을 재시도합니다. 이때는 새 Access Token 쿠키(`path=/`)만 포함되어 요청이 성공합니다.
-        *   **고려사항**: 이 방식은 자동 토큰 재발급 로직이 명확히 `/auth/refresh` 경로로만 요청을 보낼 때 동작합니다. 만약 다른 경로에서 Refresh Token 쿠키가 필요하다면 이 설정은 문제가 될 수 있습니다. 일반적인 유연성과 단순성을 위해서는 `path=/` 설정이 더 선호될 수 있습니다.
+    *   `httpOnly`, `path=/` 속성을 가진 쿠키로 저장됩니다.
+        *   **`path=/` 설정**: Access Token과 동일하게 `path=/`로 설정하여, `/auth/refresh` 엔드포인트 요청 시뿐만 아니라 다른 API 요청 시에도 브라우저가 Refresh Token 쿠키를 함께 전송하도록 합니다. 이는 백엔드에서 요청 헤더 크기를 약간 증가시킬 수 있지만, 쿠키 관리의 복잡성을 줄이고 프론트엔드 구현을 단순화하는 데 도움이 될 수 있습니다. 백엔드의 `/auth/refresh` 엔드포인트는 요청에 포함된 Refresh Token만 사용하여 갱신 로직을 처리합니다.
 
 **주요 흐름:**
 
-1.  **로그인**: 사용자가 유효한 자격 증명으로 로그인하면, 백엔드는 Access Token(`path=/`)과 Refresh Token(`path=/auth/refresh`)을 생성하여 `httpOnly` 쿠키로 설정하고, Refresh Token의 해시를 DB에 저장합니다.
-2.  **API 요청**: 프론트엔드는 API 요청 시 `withCredentials: true` 옵션을 사용하여 쿠키를 자동으로 포함시킵니다. 요청 경로에 따라 포함되는 쿠키가 달라집니다 (예: `/auth/me` 요청 시 AT만 포함, `/auth/refresh` 요청 시 AT와 RT 모두 포함). 백엔드는 주로 Access Token을 검증합니다.
-3.  **토큰 재발급**: Access Token이 만료되어 API 요청이 401 에러를 반환하면, 프론트엔드의 Axios 인터셉터가 이를 감지합니다. 인터셉터는 자동으로 `/auth/refresh` 엔드포인트로 요청을 보내고, 이때 Refresh Token 쿠키(`path=/auth/refresh`)가 함께 전송됩니다. 백엔드는 Refresh Token을 검증하고 유효하면 새로운 Access Token(`path=/`)을 발급하여 쿠키로 설정합니다. 인터셉터는 원래 실패했던 요청을 새로운 Access Token으로 재시도합니다.
-4.  **로그아웃**: 사용자가 로그아웃하면, 백엔드는 DB의 Refresh Token 해시를 제거하고, 클라이언트의 Access Token(`path=/`) 및 Refresh Token(`path=/auth/refresh`) 쿠키를 만료시킵니다.
+1.  **로그인**: 사용자가 유효한 자격 증명으로 로그인하면, 백엔드는 Access Token과 Refresh Token을 생성하여 `httpOnly`, `path=/` 속성을 가진 쿠키로 설정하고, Refresh Token의 해시를 DB에 저장합니다.
+2.  **API 요청**: 프론트엔드는 API 요청 시 `withCredentials: true` 옵션을 사용하여 쿠키를 자동으로 포함시킵니다. 백엔드는 주로 Access Token을 검증합니다.
+3.  **토큰 재발급**: Access Token이 만료되어 API 요청이 401 에러(`errorCode: 'ACCESS_TOKEN_EXPIRED'`)를 반환하면, 프론트엔드의 Axios 인터셉터가 이를 감지합니다. 인터셉터는 자동으로 `/auth/refresh` 엔드포인트로 요청을 보내고, 이때 Refresh Token 쿠키(`path=/`)가 함께 전송됩니다. 백엔드는 Refresh Token을 검증하고 유효하면 새로운 Access Token(`path=/`)을 발급하여 쿠키로 설정합니다. 인터셉터는 원래 실패했던 요청을 새로운 Access Token으로 재시도합니다.
+4.  **로그아웃**: 사용자가 로그아웃하면, 백엔드는 DB의 Refresh Token 해시를 제거하고, 클라이언트의 Access Token 및 Refresh Token 쿠키(`path=/`)를 만료시킵니다.
 
 ## 프로젝트 구조 (간략) 
 ```
@@ -190,23 +183,23 @@ NEXT_PUBLIC_API_URL=http://localhost:3000 # 백엔드 API 서버 주소
     *   `it('컨트롤러가 정의되어 있어야 함')`: 의존성 주입을 포함하여 `AuthController` 인스턴스가 성공적으로 생성되는지 기본적인 'smoke test'를 수행합니다.
 
 *   **회원가입 (signUp):**
-    *   `it('성공: 새로운 사용자를 생성하고 민감 정보를 제외한 정보를 반환해야 함')`: 회원가입 요청 시 `AuthService.signUp`이 올바른 데이터로 호출되고, 응답으로 상태 코드 201과 함께 민감 정보(비밀번호 해시 등)가 제외된 사용자 정보가 반환되는지 확인합니다.
+    *   `it('성공: 새로운 사용자를 생성하고 민감 정보를 제외한 정보를 반환해야 함')`: 회원가입 요청 시 `AuthService.signUp`이 올바른 데이터로 호출되고, 응답 객체의 `json` 메소드가 민감 정보(비밀번호 해시 등)가 제외된 사용자 정보와 함께 호출되는지 확인합니다.
     *   `it('실패: 이메일 중복 등으로 서비스에서 ConflictException 발생 시 예외를 전파해야 함')`: `AuthService.signUp`에서 이메일 중복 등의 이유로 `ConflictException`이 발생했을 때, 해당 예외가 컨트롤러를 통해 올바르게 전파되는지 확인합니다.
 
 *   **로그인 (signIn):**
-    *   `it('성공: 사용자 정보를 반환하고 AuthService가 쿠키를 설정해야 함')`: 로그인 요청 시 `AuthService.signIn`이 올바른 자격 증명 및 `Response` 객체와 함께 호출되고, 컨트롤러가 성공 메시지와 사용자 정보를 반환하는지 확인합니다. (쿠키 설정 자체는 서비스 레벨에서 이루어진다고 가정)
+    *   `it('성공: 사용자 정보를 반환하고 AuthService가 쿠키를 설정해야 함')`: 로그인 요청 시 `AuthService.signIn`이 올바른 자격 증명 및 `Response` 객체와 함께 호출되고, 컨트롤러가 성공 메시지와 사용자 정보(`AuthenticatedUser` 타입)를 반환하는지 확인합니다. (실제 쿠키 설정은 모의 `AuthService`에서 처리됨을 가정)
     *   `it('실패: 잘못된 자격 증명으로 서비스에서 UnauthorizedException 발생 시 예외를 전파해야 함')`: `AuthService.signIn`에서 잘못된 이메일/비밀번호로 인해 `UnauthorizedException`이 발생했을 때, 해당 예외가 컨트롤러를 통해 올바르게 전파되는지 확인합니다.
 
 *   **토큰 갱신 (refreshTokens):**
-    *   `it('성공: AuthService.refreshTokens를 호출하고 성공 메시지를 반환해야 함')`: 유효한 리프레시 토큰 요청 시 `AuthService.refreshTokens`가 올바른 `userId`, `refreshToken`, `Response` 객체와 함께 호출되고, 컨트롤러가 성공 메시지를 반환하는지 확인합니다. (새 토큰 쿠키 설정은 서비스 레벨 책임)
+    *   `it('성공: AuthService.refreshTokens를 호출하고 성공 메시지를 반환해야 함')`: 유효한 리프레시 토큰 요청 (`@UseGuards(AuthGuard('jwt-refresh'))` 통과 가정) 시, `AuthService.refreshTokens`가 올바른 `userId`, `refreshToken` (from `req.user`), `Response` 객체와 함께 호출되고, 컨트롤러가 성공 메시지를 반환하는지 확인합니다. (새 토큰 쿠키 설정은 모의 `AuthService` 책임)
     *   `it('실패: 유효하지 않은 리프레시 토큰으로 서비스에서 UnauthorizedException 발생 시 예외를 전파해야 함')`: `AuthService.refreshTokens`에서 만료되거나 유효하지 않은 리프레시 토큰으로 인해 `UnauthorizedException`이 발생했을 때, 해당 예외가 컨트롤러를 통해 올바르게 전파되는지 확인합니다.
 
 *   **로그아웃 (logout):**
-    *   `it('성공: AuthService.logout을 호출하고 성공 메시지를 반환해야 함')`: 로그아웃 요청 시 `AuthService.logout`이 올바른 `userId`와 `Response` 객체와 함께 호출되고, 컨트롤러가 성공 메시지를 반환하는지 확인합니다. (쿠키 제거는 서비스 레벨 책임)
+    *   `it('성공: AuthService.logout을 호출하고 성공 메시지를 반환해야 함')`: 로그아웃 요청 (`@UseGuards(JwtAuthGuard)` 통과 가정) 시 `AuthService.logout`이 올바른 `userId` (from `req.user`)와 `Response` 객체와 함께 호출되고, 컨트롤러가 성공 메시지를 반환하는지 확인합니다. (쿠키 제거는 모의 `AuthService` 책임)
 
 *   **프로필 조회 (getProfile):**
-    *   `it('성공: 인증된 사용자의 프로필 정보를 반환해야 함')`: 유효한 액세스 토큰으로 보호된 `/auth/me` 요청 시, `AuthGuard('jwt')`를 통과한 후 `@AuthenticatedRequest()` 데코레이터를 통해 주입된 `req.user` 객체가 컨트롤러에서 그대로 반환되는지 확인합니다.
+    *   `it('성공: 인증된 사용자의 프로필 정보를 반환해야 함')`: 유효한 액세스 토큰으로 보호된 `/auth/me` 요청 (`@UseGuards(JwtAuthGuard)` 통과 가정) 시, `req` 객체에 포함된 사용자 정보(`req.user`)가 컨트롤러에서 그대로 반환되는지 확인합니다.
 
 *   **토큰 만료 및 갱신 프로세스 (흐름 검증):**
-    *   `it('성공: 액세스 토큰 만료 -> 리프레시 -> 프로필 재요청 성공 흐름')`: ①로그인 후 ②액세스 토큰이 만료되었다고 가정하고 ③`/auth/refresh` 엔드포인트를 호출하여 토큰 갱신을 시뮬레이션한 뒤 ④새로 발급된 액세스 토큰으로 `/auth/me` 요청이 성공하는 전체적인 흐름을 검증합니다. (가드/인터셉터의 동작을 암시적으로 가정)
+    *   `it('성공: 액세스 토큰 만료 -> 리프레시 -> 프로필 재요청 성공 흐름')`: ①로그인 후 ②액세스 토큰이 만료되었다고 가정하고 ③`/auth/refresh` 엔드포인트를 호출하여 토큰 갱신을 시뮬레이션(모의 `AuthService.refreshTokens`에서 새 쿠키 설정)한 뒤 ④새 토큰으로 `/auth/me` 요청이 성공하는(올바른 사용자 정보 반환) 전체적인 흐름을 검증합니다.
     *   `it('실패: 리프레시 토큰 만료 시 토큰 갱신 실패')`: 리프레시 토큰 자체도 만료되었거나 유효하지 않을 때, `/auth/refresh` 엔드포인트 호출 시 `AuthService`에서 `UnauthorizedException`이 발생하고 이것이 컨트롤러를 통해 전파되는지 확인합니다.
