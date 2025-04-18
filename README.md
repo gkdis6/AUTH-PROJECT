@@ -132,23 +132,25 @@ npm run dev
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DATABASE_NAME
 
 # JWT 설정
-JWT_SECRET=your_strong_jwt_secret_key # Access Token 서명 키
-JWT_EXPIRATION_TIME=15m               # Access Token 만료 시간 (예: 15분)
-JWT_EXPIRATION_TIME_MS=900000         # Access Token 만료 시간 (밀리초)
+JWT_SECRET=your_strong_jwt_secret_key
+JWT_EXPIRATION_TIME=15m
+JWT_EXPIRATION_TIME_MS=900000
 
-JWT_REFRESH_SECRET=your_strong_jwt_refresh_secret_key # Refresh Token 서명 키
-JWT_REFRESH_EXPIRATION_TIME=7d        # Refresh Token 만료 시간 (예: 7일)
-JWT_REFRESH_EXPIRATION_TIME_MS=604800000 # Refresh Token 만료 시간 (밀리초)
+JWT_REFRESH_SECRET=your_strong_jwt_refresh_secret_key
+JWT_REFRESH_EXPIRATION_TIME=7d
+JWT_REFRESH_EXPIRATION_TIME_MS=604800000
 
-# 기타
-NODE_ENV=development # 'development' 또는 'production' (쿠키 secure 속성 등에 영향)
-PORT=3000            # 백엔드 서버 포트
+# 서버 설정
+NODE_ENV=development # 'development' 또는 'production'
+PORT=3000            # 백엔드 서버 포트 (기본값: 3000)
+FRONTEND_URL=http://localhost:3001 # CORS 설정에 사용될 프론트엔드 주소
 ```
 
 **프론트엔드 (`frontend/.env.local`)**:
 
 ```text
 NEXT_PUBLIC_API_URL=http://localhost:3000 # 백엔드 API 서버 주소
+PORT=3001                               # 프론트엔드 개발 서버 포트 (기본값: 3000 또는 다음 사용 가능 포트)
 ```
 
 ## 주요 기능
